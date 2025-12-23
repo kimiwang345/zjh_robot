@@ -1,0 +1,74 @@
+[
+  {
+    "id": 0,
+    "path": "models\\population\\pop_000_counter.pth",
+    "source": "counter_best",
+    "episode": 0
+  },
+  {
+    "id": 1,
+    "path": "models\\population\\pop_001.pth",
+    "episode": 40000,
+    "score": -17.082840020315988
+  },
+  {
+    "id": 2,
+    "path": "models\\population\\pop_002.pth",
+    "episode": 60000,
+    "score": -19.133562305995397
+  },
+  {
+    "id": 3,
+    "path": "models\\population\\pop_003.pth",
+    "episode": 80000,
+    "score": -21.325006675720218
+  },
+  {
+    "id": 4,
+    "path": "models\\population\\pop_004.pth",
+    "episode": 100000,
+    "score": -21.880546896798272
+  },
+  {
+    "id": 5,
+    "path": "models\\population\\pop_005.pth",
+    "episode": 120000,
+    "score": -18.297530719212126
+  },
+  {
+    "id": 6,
+    "path": "models\\population\\pop_006.pth",
+    "episode": 140000,
+    "score": -22.22780113220215
+  },
+  {
+    "id": 7,
+    "path": "models\\population\\pop_007.pth",
+    "episode": 160000,
+    "score": -18.19869956970215
+  },
+  {
+    "id": 8,
+    "path": "models\\population\\pop_008.pth",
+    "episode": 180000,
+    "score": -22.510457284109933
+  },
+  {
+    "id": 9,
+    "path": "models\\population\\pop_009.pth",
+    "episode": 200000,
+    "score": -20.430704961504254
+  },
+  {
+    "id": 10,
+    "path": "models\\population\\pop_010.pth",
+    "episode": 220000,
+    "score": -22.656271498543877
+  },
+  {
+    "id": 11,
+    "path": "models\\population\\pop_011.pth",
+    "episode": 380000,
+    "score": -23.98011477334159
+  }
+]

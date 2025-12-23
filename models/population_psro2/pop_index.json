@@ -1,0 +1,184 @@
+[
+  {
+    "id": 0,
+    "path": "models\\population_psro2\\pop_000_ce2.pth",
+    "source": "ce2_best",
+    "episode": 0,
+    "score": null
+  },
+  {
+    "id": 1,
+    "path": "models\\population_psro2\\pop_001.pth",
+    "episode": 20000,
+    "score": 8.361008512973784,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 2,
+    "path": "models\\population_psro2\\pop_002.pth",
+    "episode": 40000,
+    "score": 10.563797051565988,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 3,
+    "path": "models\\population_psro2\\pop_003.pth",
+    "episode": 60000,
+    "score": 10.366008559295109,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 4,
+    "path": "models\\population_psro2\\pop_004.pth",
+    "episode": 80000,
+    "score": 10.1798059122903,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 5,
+    "path": "models\\population_psro2\\pop_005.pth",
+    "episode": 100000,
+    "score": 11.192219974313463,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 6,
+    "path": "models\\population_psro2\\pop_006.pth",
+    "episode": 120000,
+    "score": 11.50727733884539,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 7,
+    "path": "models\\population_psro2\\pop_007.pth",
+    "episode": 140000,
+    "score": 12.302128665787832,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 8,
+    "path": "models\\population_psro2\\pop_008.pth",
+    "episode": 160000,
+    "score": 12.664031536238534,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 9,
+    "path": "models\\population_psro2\\pop_009.pth",
+    "episode": 180000,
+    "score": 11.444000158991132,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 10,
+    "path": "models\\population_psro2\\pop_010.pth",
+    "episode": 200000,
+    "score": 12.162411529677255,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 11,
+    "path": "models\\population_psro2\\pop_011.pth",
+    "episode": 220000,
+    "score": 12.904217192104886,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 12,
+    "path": "models\\population_psro2\\pop_012.pth",
+    "episode": 240000,
+    "score": 5.431628840310232,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 13,
+    "path": "models\\population_psro2\\pop_013.pth",
+    "episode": 260000,
+    "score": 13.933625496285302,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 14,
+    "path": "models\\population_psro2\\pop_014.pth",
+    "episode": 280000,
+    "score": 14.06781386498894,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 15,
+    "path": "models\\population_psro2\\pop_015.pth",
+    "episode": 300000,
+    "score": 12.324008213622228,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 16,
+    "path": "models\\population_psro2\\pop_016.pth",
+    "episode": 320000,
+    "score": 8.496108494805439,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 17,
+    "path": "models\\population_psro2\\pop_017.pth",
+    "episode": 340000,
+    "score": 11.111071454414299,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 18,
+    "path": "models\\population_psro2\\pop_018.pth",
+    "episode": 360000,
+    "score": 5.980539926460812,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 19,
+    "path": "models\\population_psro2\\pop_019.pth",
+    "episode": 380000,
+    "score": 1.4461968328271606,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 20,
+    "path": "models\\population_psro2\\pop_020.pth",
+    "episode": 400000,
+    "score": 0.9082570280347539,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 21,
+    "path": "models\\population_psro2\\pop_021.pth",
+    "episode": 420000,
+    "score": 0.1830795049667362,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 22,
+    "path": "models\\population_psro2\\pop_022.pth",
+    "episode": 440000,
+    "score": -0.9465682268142697,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 23,
+    "path": "models\\population_psro2\\pop_023.pth",
+    "episode": 460000,
+    "score": -4.522994068690709,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 24,
+    "path": "models\\population_psro2\\pop_024.pth",
+    "episode": 480000,
+    "score": 0.2271145241601129,
+    "source": "psro2_admit"
+  },
+  {
+    "id": 25,
+    "path": "models\\population_psro2\\pop_025.pth",
+    "episode": 500000,
+    "score": -5.557516854149954,
+    "source": "psro2_admit"
+  }
+]

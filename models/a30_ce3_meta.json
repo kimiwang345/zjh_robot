@@ -1,0 +1,7 @@
+{
+  "next_episode": 500001,
+  "total_steps": 4138256,
+  "best_mean_ev": 8.046600341796875,
+  "boot_hint": "psro2_best > psro_best > counter_best",
+  "opponent": "NitOpponent"
+}

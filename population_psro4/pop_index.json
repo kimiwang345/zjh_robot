@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "name": "pop_000_psro4.pth",
+      "path": "population_psro4\\pop_000_psro4.pth",
+      "note": "boot snapshot of PSRO-4",
+      "added_at": "2025-12-20 17:15:53"
+    },
+    {
+      "name": "pop_001_psro4.pth",
+      "path": "population_psro4\\pop_001_psro4.pth",
+      "note": "admitted at ep=20000, mean_ev=+0.3796",
+      "added_at": "2025-12-20 18:42:08"
+    },
+    {
+      "name": "pop_002_psro4.pth",
+      "path": "population_psro4\\pop_002_psro4.pth",
+      "note": "admitted at ep=40000, mean_ev=-5.8106",
+      "added_at": "2025-12-20 20:06:25"
+    },
+    {
+      "name": "pop_003_psro4.pth",
+      "path": "population_psro4\\pop_003_psro4.pth",
+      "note": "admitted at ep=60000, mean_ev=+4.2452",
+      "added_at": "2025-12-20 21:32:46"
+    },
+    {
+      "name": "pop_004_psro4.pth",
+      "path": "population_psro4\\pop_004_psro4.pth",
+      "note": "admitted at ep=80000, mean_ev=+3.8550",
+      "added_at": "2025-12-20 23:03:05"
+    },
+    {
+      "name": "pop_005_psro4.pth",
+      "path": "population_psro4\\pop_005_psro4.pth",
+      "note": "admitted at ep=140000, mean_ev=-4.0074",
+      "added_at": "2025-12-21 02:50:39"
+    },
+    {
+      "name": "pop_006_psro4.pth",
+      "path": "population_psro4\\pop_006_psro4.pth",
+      "note": "admitted at ep=160000, mean_ev=-5.4996",
+      "added_at": "2025-12-21 03:52:17"
+    },
+    {
+      "name": "pop_007_psro4.pth",
+      "path": "population_psro4\\pop_007_psro4.pth",
+      "note": "admitted at ep=180000, mean_ev=+3.0938",
+      "added_at": "2025-12-21 04:53:06"
+    },
+    {
+      "name": "pop_008_psro4.pth",
+      "path": "population_psro4\\pop_008_psro4.pth",
+      "note": "admitted at ep=200000, mean_ev=+5.9132",
+      "added_at": "2025-12-21 05:56:52"
+    },
+    {
+      "name": "pop_009_psro4.pth",
+      "path": "population_psro4\\pop_009_psro4.pth",
+      "note": "admitted at ep=220000, mean_ev=+5.0020",
+      "added_at": "2025-12-21 07:08:23"
+    },
+    {
+      "name": "pop_010_psro4.pth",
+      "path": "population_psro4\\pop_010_psro4.pth",
+      "note": "admitted at ep=240000, mean_ev=+3.4470",
+      "added_at": "2025-12-21 08:13:22"
+    },
+    {
+      "name": "pop_011_psro4.pth",
+      "path": "population_psro4\\pop_011_psro4.pth",
+      "note": "admitted at ep=260000, mean_ev=+4.0520",
+      "added_at": "2025-12-21 09:21:45"
+    },
+    {
+      "name": "pop_012_psro4.pth",
+      "path": "population_psro4\\pop_012_psro4.pth",
+      "note": "admitted at ep=280000, mean_ev=+1.5974",
+      "added_at": "2025-12-21 10:33:53"
+    },
+    {
+      "name": "pop_013_psro4.pth",
+      "path": "population_psro4\\pop_013_psro4.pth",
+      "note": "admitted at ep=300000, mean_ev=+6.7518",
+      "added_at": "2025-12-21 11:39:25"
+    },
+    {
+      "name": "pop_014_psro4.pth",
+      "path": "population_psro4\\pop_014_psro4.pth",
+      "note": "admitted at ep=320000, mean_ev=+8.7116",
+      "added_at": "2025-12-21 12:42:59"
+    },
+    {
+      "name": "pop_015_psro4.pth",
+      "path": "population_psro4\\pop_015_psro4.pth",
+      "note": "admitted at ep=340000, mean_ev=+8.6778",
+      "added_at": "2025-12-21 13:46:21"
+    },
+    {
+      "name": "pop_016_psro4.pth",
+      "path": "population_psro4\\pop_016_psro4.pth",
+      "note": "admitted at ep=360000, mean_ev=+8.3712",
+      "added_at": "2025-12-21 14:53:48"
+    },
+    {
+      "name": "pop_017_psro4.pth",
+      "path": "population_psro4\\pop_017_psro4.pth",
+      "note": "admitted at ep=380000, mean_ev=-10.2382",
+      "added_at": "2025-12-21 15:59:13"
+    },
+    {
+      "name": "pop_018_psro4.pth",
+      "path": "population_psro4\\pop_018_psro4.pth",
+      "note": "admitted at ep=400000, mean_ev=+10.5534",
+      "added_at": "2025-12-21 17:17:52"
+    },
+    {
+      "name": "pop_019_psro4.pth",
+      "path": "population_psro4\\pop_019_psro4.pth",
+      "note": "admitted at ep=420000, mean_ev=+11.0514",
+      "added_at": "2025-12-21 18:38:09"
+    },
+    {
+      "name": "pop_020_psro4.pth",
+      "path": "population_psro4\\pop_020_psro4.pth",
+      "note": "admitted at ep=440000, mean_ev=+9.4592",
+      "added_at": "2025-12-21 20:01:39"
+    },
+    {
+      "name": "pop_021_psro4.pth",
+      "path": "population_psro4\\pop_021_psro4.pth",
+      "note": "admitted at ep=460000, mean_ev=+9.6464",
+      "added_at": "2025-12-21 21:31:37"
+    },
+    {
+      "name": "pop_022_psro4.pth",
+      "path": "population_psro4\\pop_022_psro4.pth",
+      "note": "admitted at ep=480000, mean_ev=+1.5708",
+      "added_at": "2025-12-21 22:57:00"
+    },
+    {
+      "name": "pop_023_psro4.pth",
+      "path": "population_psro4\\pop_023_psro4.pth",
+      "note": "admitted at ep=500000, mean_ev=-2.3160",
+      "added_at": "2025-12-22 00:18:56"
+    },
+    {
+      "name": "pop_024_psro4.pth",
+      "path": "population_psro4\\pop_024_psro4.pth",
+      "note": "boot snapshot of PSRO-4(v2)",
+      "added_at": "2025-12-22 00:30:16"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "episode": 500001,
+  "total_steps": 5860111,
+  "epsilon": 0.01,
+  "best_mean_ev": 1.7012,
+  "updated_at": "2025-12-20 14:58:28",
+  "population_size": 25,
+  "last_eval": {
+    "ep": 500000,
+    "mean_ev": 1.5098,
+    "std_ev": 5.312617430231543,
+    "min": -100.0,
+    "max": 7.0,
+    "population_size": 26,
+    "time": "2025-12-20 15:12:47"
+  },
+  "stopped_at_episode": 500001,
+  "finished_at": "2025-12-20 15:12:47"
+}

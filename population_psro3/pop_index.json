@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "name": "pop_000_ce3.pth",
+      "path": "population_psro3\\pop_000_ce3.pth",
+      "note": "seed from CE-3 best",
+      "added_at": "2025-12-19 00:24:00"
+    },
+    {
+      "name": "pop_001_psro3.pth",
+      "path": "population_psro3\\pop_001_psro3.pth",
+      "note": "admitted at ep=20000, mean_ev=+1.5072",
+      "added_at": "2025-12-19 02:07:49"
+    },
+    {
+      "name": "pop_002_psro3.pth",
+      "path": "population_psro3\\pop_002_psro3.pth",
+      "note": "admitted at ep=40000, mean_ev=+1.5022",
+      "added_at": "2025-12-19 03:43:51"
+    },
+    {
+      "name": "pop_003_psro3.pth",
+      "path": "population_psro3\\pop_003_psro3.pth",
+      "note": "admitted at ep=60000, mean_ev=+1.3492",
+      "added_at": "2025-12-19 05:19:07"
+    },
+    {
+      "name": "pop_004_psro3.pth",
+      "path": "population_psro3\\pop_004_psro3.pth",
+      "note": "admitted at ep=80000, mean_ev=-2.8236",
+      "added_at": "2025-12-19 06:57:05"
+    },
+    {
+      "name": "pop_005_psro3.pth",
+      "path": "population_psro3\\pop_005_psro3.pth",
+      "note": "admitted at ep=100000, mean_ev=+1.2490",
+      "added_at": "2025-12-19 08:44:54"
+    },
+    {
+      "name": "pop_006_psro3.pth",
+      "path": "population_psro3\\pop_006_psro3.pth",
+      "note": "admitted at ep=120000, mean_ev=+1.1124",
+      "added_at": "2025-12-19 10:32:00"
+    },
+    {
+      "name": "pop_007_psro3.pth",
+      "path": "population_psro3\\pop_007_psro3.pth",
+      "note": "admitted at ep=140000, mean_ev=+1.4080",
+      "added_at": "2025-12-19 12:17:43"
+    },
+    {
+      "name": "pop_008_psro3.pth",
+      "path": "population_psro3\\pop_008_psro3.pth",
+      "note": "admitted at ep=160000, mean_ev=+1.1182",
+      "added_at": "2025-12-19 14:03:28"
+    },
+    {
+      "name": "pop_009_psro3.pth",
+      "path": "population_psro3\\pop_009_psro3.pth",
+      "note": "admitted at ep=180000, mean_ev=+1.5294",
+      "added_at": "2025-12-19 15:49:17"
+    },
+    {
+      "name": "pop_010_psro3.pth",
+      "path": "population_psro3\\pop_010_psro3.pth",
+      "note": "admitted at ep=200000, mean_ev=+0.9666",
+      "added_at": "2025-12-19 17:28:18"
+    },
+    {
+      "name": "pop_011_psro3.pth",
+      "path": "population_psro3\\pop_011_psro3.pth",
+      "note": "admitted at ep=220000, mean_ev=+1.3976",
+      "added_at": "2025-12-19 19:00:15"
+    },
+    {
+      "name": "pop_012_psro3.pth",
+      "path": "population_psro3\\pop_012_psro3.pth",
+      "note": "admitted at ep=240000, mean_ev=+1.3944",
+      "added_at": "2025-12-19 20:29:58"
+    },
+    {
+      "name": "pop_013_psro3.pth",
+      "path": "population_psro3\\pop_013_psro3.pth",
+      "note": "admitted at ep=260000, mean_ev=-0.0884",
+      "added_at": "2025-12-19 22:18:29"
+    },
+    {
+      "name": "pop_014_psro3.pth",
+      "path": "population_psro3\\pop_014_psro3.pth",
+      "note": "admitted at ep=280000, mean_ev=+1.5994",
+      "added_at": "2025-12-20 00:17:05"
+    },
+    {
+      "name": "pop_015_psro3.pth",
+      "path": "population_psro3\\pop_015_psro3.pth",
+      "note": "admitted at ep=300000, mean_ev=+0.9156",
+      "added_at": "2025-12-20 01:49:50"
+    },
+    {
+      "name": "pop_016_psro3.pth",
+      "path": "population_psro3\\pop_016_psro3.pth",
+      "note": "admitted at ep=320000, mean_ev=+0.8222",
+      "added_at": "2025-12-20 03:21:25"
+    },
+    {
+      "name": "pop_017_psro3.pth",
+      "path": "population_psro3\\pop_017_psro3.pth",
+      "note": "admitted at ep=340000, mean_ev=+1.4946",
+      "added_at": "2025-12-20 04:50:07"
+    },
+    {
+      "name": "pop_018_psro3.pth",
+      "path": "population_psro3\\pop_018_psro3.pth",
+      "note": "admitted at ep=360000, mean_ev=+1.0766",
+      "added_at": "2025-12-20 06:15:40"
+    },
+    {
+      "name": "pop_019_psro3.pth",
+      "path": "population_psro3\\pop_019_psro3.pth",
+      "note": "admitted at ep=380000, mean_ev=+0.9294",
+      "added_at": "2025-12-20 07:35:05"
+    },
+    {
+      "name": "pop_020_psro3.pth",
+      "path": "population_psro3\\pop_020_psro3.pth",
+      "note": "admitted at ep=400000, mean_ev=+1.3046",
+      "added_at": "2025-12-20 08:52:40"
+    },
+    {
+      "name": "pop_021_psro3.pth",
+      "path": "population_psro3\\pop_021_psro3.pth",
+      "note": "admitted at ep=420000, mean_ev=+1.1562",
+      "added_at": "2025-12-20 10:12:17"
+    },
+    {
+      "name": "pop_022_psro3.pth",
+      "path": "population_psro3\\pop_022_psro3.pth",
+      "note": "admitted at ep=440000, mean_ev=+1.7012",
+      "added_at": "2025-12-20 11:26:37"
+    },
+    {
+      "name": "pop_023_psro3.pth",
+      "path": "population_psro3\\pop_023_psro3.pth",
+      "note": "admitted at ep=460000, mean_ev=+1.2872",
+      "added_at": "2025-12-20 12:41:06"
+    },
+    {
+      "name": "pop_024_psro3.pth",
+      "path": "population_psro3\\pop_024_psro3.pth",
+      "note": "admitted at ep=480000, mean_ev=+1.5454",
+      "added_at": "2025-12-20 13:57:26"
+    },
+    {
+      "name": "pop_025_psro3.pth",
+      "path": "population_psro3\\pop_025_psro3.pth",
+      "note": "admitted at ep=500000, mean_ev=+1.5098",
+      "added_at": "2025-12-20 15:12:47"
+    }
+  ]
+}
