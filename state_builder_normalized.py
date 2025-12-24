@@ -1,106 +1,148 @@
-# state_builder_normalized.py
+"""
+state_builder_normalized.py
+===========================
+
+职责：
+- 从 ZJHEnvMulti2to9 构建【归一化状态】
+- 消除 ante / stack / pot 的尺度影响
+- 与 A30Agent / config_a30_hybrid 完全一致
+
+原则：
+- 所有金额类特征尽量“相对化”
+- 关键规则变量（ante / round / alive_cnt）保留原值或轻归一
+"""
+
 import numpy as np
-from typing import Dict, Any, List, Tuple
 
 
 # ============================================================
-# 牌型评估（必须与 ZJHEnvMulti14_8p 完全一致）
+# 常量
 # ============================================================
 
-def evaluate_hand(cards: List[Tuple[int, int]]) -> int:
-    """
-    cards: [(rank, suit), ...]
-    rank: 2~14
-    suit: 0~3
-    """
-    ranks = sorted([c[0] for c in cards], reverse=True)
-    suits = [c[1] for c in cards]
-    r1, r2, r3 = ranks
-
-    is_flush = (len(set(suits)) == 1)
-    is_straight = (r1 == r2 + 1 == r3 + 2) or (r1 == 14 and r2 == 3 and r3 == 2)
-
-    if r1 == r2 == r3:
-        return 5
-    if is_flush and is_straight:
-        return 4
-    if is_flush:
-        return 3
-    if is_straight:
-        return 2
-    if r1 == r2 or r2 == r3:
-        return 1
-    return 0
+EPS = 1e-6
 
 
 # ============================================================
-# 49 维 State Builder（金额线性归一化版）
+# 主入口
 # ============================================================
 
-class ZJHStateBuilder49Normalized:
+def build_state(env):
     """
-    作用：
-    - 把线上任意筹码 / 底注
-    - 映射回训练时的尺度（ante = 1, stack ≈ 100）
+    返回：
+        np.ndarray shape = (49,)
+    必须与 env.state_dim 完全一致
     """
 
-    def build(self, payload: Dict[str, Any]) -> np.ndarray:
-        state = np.zeros(49, dtype=np.float32)
+    hero = env.players[0]
 
-        # =========================
-        # 一、Hero 手牌
-        # =========================
-        cards = [(c["rank"], c["suit"]) for c in payload["my_cards"]]
-        hand_type = evaluate_hand(cards)
+    # --------------------------------------------------------
+    # 1. Hero 手牌信息（不归一化类型，只归一化 rank）
+    # --------------------------------------------------------
 
-        ranks = sorted([c[0] for c in cards], reverse=True)
-        hi, mid, lo = ranks
-        strength = (hand_type + hi / 14.0) / 6.0
+    t = env.hero_hand_type / 5.0          # 0~1
+    hi = env.hero_hi / 14.0               # 0~1
+    mid = env.hero_mid / 14.0
+    lo = env.hero_lo / 14.0
+    strength = env.hero_strength          # 已是 0~1
 
-        state[0] = hand_type
-        state[1] = hi
-        state[2] = mid
-        state[3] = lo
-        state[4] = strength
+    # --------------------------------------------------------
+    # 2. 人数 / 轮数
+    # --------------------------------------------------------
 
-        # =========================
-        # 二、牌局结构信息（不归一化）
-        # =========================
-        state[5] = payload.get("round", 0)
-        state[6] = payload.get("num_players", payload.get("alive_players", 1))
-        state[7] = payload.get("alive_players", 1)
-        state[11] = 1.0 if payload.get("has_looked", False) else 0.0
+    round_norm = env.round_index / max(1.0, env.max_round)
+    num_players_norm = env.num_players / env.max_players
+    alive_norm = env.alive_cnt / max(1.0, env.num_players)
 
-        # =========================
-        # 三、金额归一化（核心）
-        # =========================
-        ante = float(payload.get("ante", 1.0))
-        if ante <= 0:
-            ante = 1.0  # 防止除 0
+    # --------------------------------------------------------
+    # 3. 下注尺度（关键）
+    # --------------------------------------------------------
 
-        # 训练环境中 ante 恒为 1
-        state[8] = 1.0
-        state[9] = payload.get("pot", 0.0) / ante
-        state[10] = payload.get("max_bet", 0.0) / ante
-        state[12] = payload.get("chips", 0.0) / ante
-        state[13] = payload.get("hero_bet", 0.0) / ante
+    ante = env.ante_bb
 
-        # =========================
-        # 四、对手状态（1~7）
-        # =========================
-        opponents = {o["seat"]: o for o in payload.get("opponents", [])}
-        idx = 14
+    # 当前最低下注倍数（unit）
+    current_unit = env.current_bet_unit
 
-        for seat in range(1, 8):
-            o = opponents.get(seat)
-            if o and o.get("alive", False):
-                state[idx]     = 1.0
-                state[idx + 1] = 1.0 if o.get("has_looked", False) else 0.0
-                state[idx + 2] = o.get("chips", 0.0) / ante
-                state[idx + 3] = o.get("bet", 0.0) / ante
-                state[idx + 4] = o.get("last_act", 0)
+    # hero 最低需要下注的 unit
+    min_unit = env._min_required_unit(hero)
+
+    # --------------------------------------------------------
+    # 4. Hero 金额相关（全部相对化）
+    # --------------------------------------------------------
+
+    # hero 剩余筹码 / 初始筹码
+    hero_stack_norm = hero["stack_bb"] / max(env.starting_stack_bb, EPS)
+
+    # hero 已投入 / 初始筹码
+    hero_contrib_norm = hero["contrib_bb"] / max(env.starting_stack_bb, EPS)
+
+    # hero stack / 场均 stack
+    avg_stack = _avg_alive_stack(env)
+    hero_vs_avg = hero["stack_bb"] / max(avg_stack, EPS)
+
+    # pot / 场均 stack
+    pot_norm = env.pot_bb / max(avg_stack, EPS)
+
+    # --------------------------------------------------------
+    # 5. Hero 状态
+    # --------------------------------------------------------
+
+    hero_seen = float(hero["has_seen"])
+
+    # --------------------------------------------------------
+    # 6. 拼装 Hero 状态（14 维）
+    # --------------------------------------------------------
+
+    state = [
+        t,
+        hi,
+        mid,
+        lo,
+        strength,
+        round_norm,
+        num_players_norm,
+        alive_norm,
+        ante / (ante + 10.0),        # 轻归一（防止 ante=10 放大）
+        pot_norm,
+        current_unit / 10.0,          # unit ∈ [1,10]
+        min_unit / 10.0,
+        hero_seen,
+        hero_vs_avg,
+    ]
+
+    # --------------------------------------------------------
+    # 7. 对手状态（每人 5 维 × 8 = 40）
+    # --------------------------------------------------------
+
+    for idx in range(1, env.max_players):
+        if idx < env.num_players:
+            p = env.players[idx]
+            if p["alive"]:
+                state.extend([
+                    1.0,                                   # alive
+                    float(p["has_seen"]),                  # seen
+                    p["stack_bb"] / max(avg_stack, EPS),   # stack / avg
+                    p["contrib_bb"] / max(avg_stack, EPS), # contrib / avg
+                    float(p["last_act"]) / 5.0,            # act type
+                ])
             else:
-                state[idx:idx + 5] = 0.0
-            idx += 5
+                state.extend([0.0, 0.0, 0.0, 0.0, 0.0])
+        else:
+            state.extend([0.0, 0.0, 0.0, 0.0, 0.0])
 
-        return state
+    assert len(state) == 54, f"State dim mismatch: {len(state)} != 54"
+
+    return np.array(state, dtype=np.float32)
+
+
+# ============================================================
+# Utils
+# ============================================================
+
+def _avg_alive_stack(env):
+    total = 0.0
+    cnt = 0
+    for p in env.players[:env.num_players]:
+        if p["alive"]:
+            total += p["stack_bb"]
+            cnt += 1
+    return total / max(1, cnt)

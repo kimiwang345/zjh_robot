@@ -1,94 +1,228 @@
-# per_buffer.py
+import random
 import numpy as np
-from typing import Tuple
 
-class PrioritizedReplayBuffer:
-    def __init__(self,
-                 capacity: int,
-                 alpha: float = 0.6,
-                 eps: float = 1e-6):
+
+# ============================================================
+# SumTree（PER 核心结构）
+# ============================================================
+
+class SumTree:
+    def __init__(self, capacity):
         self.capacity = capacity
-        self.alpha = alpha
-        self.eps = eps
-
-        self.pos = 0
+        self.tree = np.zeros(2 * capacity - 1, dtype=np.float32)
+        self.data = [None] * capacity
+        self.write = 0
         self.size = 0
 
-        self.states = None
-        self.actions = np.zeros(capacity, dtype=np.int64)
-        self.rewards = np.zeros(capacity, dtype=np.float32)
-        self.next_states = None
-        self.dones = np.zeros(capacity, dtype=np.bool_)
+    def total(self):
+        return self.tree[0]
 
-        # 优先级
-        self.priorities = np.zeros(capacity, dtype=np.float32)
+    def add(self, priority, data):
+        idx = self.write + self.capacity - 1
+        self.data[self.write] = data
+        self.update(idx, priority)
 
-    def _init_state_arrays(self, state: np.ndarray):
-        if self.states is None:
-            state_shape = state.shape
-            self.states = np.zeros((self.capacity, *state_shape), dtype=np.float32)
-            self.next_states = np.zeros((self.capacity, *state_shape), dtype=np.float32)
+        self.write += 1
+        if self.write >= self.capacity:
+            self.write = 0
 
-    def push(self,
-             state: np.ndarray,
-             action: int,
-             reward: float,
-             next_state: np.ndarray,
-             done: bool):
-        if self.states is None:
-            self._init_state_arrays(state)
-
-        idx = self.pos
-
-        self.states[idx] = state
-        self.actions[idx] = action
-        self.rewards[idx] = reward
-        self.next_states[idx] = next_state
-        self.dones[idx] = done
-
-        # 新样本给最大优先级，保证被采样
-        max_prio = self.priorities.max() if self.size > 0 else 1.0
-        self.priorities[idx] = max_prio
-
-        self.pos = (self.pos + 1) % self.capacity
         self.size = min(self.size + 1, self.capacity)
 
-    def sample(self,
-               batch_size: int,
-               beta: float) -> Tuple[np.ndarray, ...]:
-        assert self.size > 0, "Buffer is empty"
+    def update(self, idx, priority):
+        change = priority - self.tree[idx]
+        self.tree[idx] = priority
 
-        prios = self.priorities[:self.size]
-        probs = prios ** self.alpha
-        probs /= probs.sum()
+        # 向上更新
+        while idx != 0:
+            idx = (idx - 1) // 2
+            self.tree[idx] += change
 
-        indices = np.random.choice(self.size,
-                                   batch_size,
-                                   p=probs,
-                                   replace=False if batch_size <= self.size else True)
+    def get(self, s):
+        """
+        s ∈ [0, total)
+        """
+        idx = 0
+        while True:
+            left = 2 * idx + 1
+            right = left + 1
+            if left >= len(self.tree):
+                break
+            if s <= self.tree[left]:
+                idx = left
+            else:
+                s -= self.tree[left]
+                idx = right
+        data_idx = idx - self.capacity + 1
+        return idx, self.tree[idx], self.data[data_idx]
 
-        # importance-sampling 权重
-        total = self.size
-        weights = (total * probs[indices]) ** (-beta)
-        weights /= weights.max()  # 归一到 [0,1]
 
-        batch_states = self.states[indices]
-        batch_actions = self.actions[indices]
-        batch_rewards = self.rewards[indices]
-        batch_next_states = self.next_states[indices]
-        batch_dones = self.dones[indices]
+# ============================================================
+# Prioritized Experience Replay Buffer (Mask-aware)
+# ============================================================
 
-        return (batch_states,
-                batch_actions,
-                batch_rewards,
-                batch_next_states,
-                batch_dones,
-                indices,
-                weights.astype(np.float32))
+class PERReplayBuffer:
+    """
+    每条 transition：
+      (state, action, reward, next_state, done, mask, next_mask)
+    """
 
-    def update_priorities(self, indices, td_errors):
-        td_errors = np.abs(td_errors) + self.eps
-        self.priorities[indices] = td_errors
+    def __init__(
+        self,
+        capacity: int,
+        alpha: float = 0.6,
+        beta_start: float = 0.4,
+        beta_frames: int = 500_000,
+        eps: float = 1e-6,
+    ):
+        self.capacity = capacity
+        self.alpha = alpha
+        self.beta_start = beta_start
+        self.beta_frames = beta_frames
+        self.eps = eps
 
-    def __len__(self):
-        return self.size
+        self.beta = beta_start
+        self.beta_increment = (1.0 - beta_start) / max(1, beta_frames)
+
+        self.tree = SumTree(capacity)
+        self.max_priority = 1.0
+
+        self.frame = 1
+
+    # --------------------------------------------------------
+    # 基本接口
+    # --------------------------------------------------------
+
+    def size(self):
+        return self.tree.size
+
+    def push(
+        self,
+        state,
+        action,
+        reward,
+        next_state,
+        done,
+        mask,
+        next_mask,
+    ):
+        """
+        存储 transition
+        """
+        data = (
+            state,
+            action,
+            reward,
+            next_state,
+            done,
+            mask,
+            next_mask,
+        )
+        self.tree.add(self.max_priority, data)
+
+    # --------------------------------------------------------
+    # Sample
+    # --------------------------------------------------------
+
+    def sample(self, batch_size):
+        """
+        Returns:
+            (states, actions, rewards, next_states, dones, masks, next_masks)
+            or None if sampling failed
+        """
+
+        if self.size() < batch_size:
+            return None
+
+        batch = []
+        idxs = []
+        total_p = self.tree.total()
+        if not np.isfinite(total_p) or total_p <= 0:
+            return None
+
+        segment = total_p / batch_size
+
+        for i in range(batch_size):
+            a = segment * i
+            b = segment * (i + 1)
+
+            s = random.uniform(a, b)
+            idx, priority, data = self.tree.get(s)
+
+            # ⭐ 关键防御 1：采样失败
+            if data is None:
+                return None
+
+            batch.append(data)
+            idxs.append(idx)
+
+        # ⭐ 关键防御 2：batch 完整性
+        if len(batch) != batch_size:
+            return None
+
+        # ⭐ 关键防御 3：zip 前兜底
+        try:
+            states, actions, rewards, next_states, dones, masks, next_masks = zip(*batch)
+        except Exception:
+            return None
+
+        states = np.stack(states)
+        actions = np.array(actions, dtype=np.int64)
+        rewards = np.array(rewards, dtype=np.float32)
+        next_states = np.stack(next_states)
+        dones = np.array(dones, dtype=np.float32)
+        masks = np.stack(masks)
+        next_masks = np.stack(next_masks)
+
+        # importance-sampling weights
+        priorities = []
+        for idx in idxs:
+            priorities.append(self.tree.tree[idx])
+
+        probs = np.array(priorities) / self.tree.total()
+        weights = (self.size() * probs) ** (-self.beta)
+        weights /= weights.max()
+
+        self.beta = min(1.0, self.beta + self.beta_increment)
+
+        return (
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            masks,
+            next_masks,
+            idxs,
+            weights,
+        )
+
+
+    # --------------------------------------------------------
+    # Update priorities
+    # --------------------------------------------------------
+
+    def update_priorities(self, indices, priorities):
+        for idx, p in zip(indices, priorities):
+            idx = int(idx)        # ⭐ 核心修复
+            p = float(p)
+
+            # ===== PER 数值防线 =====
+            if not np.isfinite(p):
+                p = 1e-6
+            p = max(p, 1e-6)
+
+            self.tree.update(idx, p)
+
+
+            self.max_priority = max(self.max_priority, p)
+
+
+    # --------------------------------------------------------
+    # Utils
+    # --------------------------------------------------------
+
+    def _beta_by_frame(self, frame_idx):
+        return min(
+            1.0,
+            self.beta_start + frame_idx * (1.0 - self.beta_start) / self.beta_frames,
+        )

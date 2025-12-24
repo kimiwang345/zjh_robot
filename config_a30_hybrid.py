@@ -1,251 +1,224 @@
-# config_a30_hybrid.py
-from dataclasses import dataclass
-import torch
+"""
+A30 Hybrid Config
+=================
+
+适用范围：
+- 扎金花（ZJHEnvMulti2to9）
+- 正确下注规则（无 CALL / 有最小下注倍数）
+- Action Mask 强约束
+- PSRO-5 Self-Play
+- A30Agent（Mask-aware DQN）
+
+本配置文件的目标是：
+1. 保证训练稳定
+2. 保证规则一致
+3. 保证可线上迁移（ante=5 / 10 / 20）
+"""
+
+import math
 
 
-@dataclass
-class A30ConfigHybrid:
+# ============================================================
+# 1. Environment Config
+# ============================================================
+
+class EnvConfig:
+    # 玩家数量
+    MIN_PLAYERS = 2
+    MAX_PLAYERS = 9
+
+    # 最大轮数（到达后强制 COMPARE_ALL）
+    MAX_ROUND = 20
+
+    # ante（BB）：下注基数（不是德州意义的前注）
+    # 训练时做 domain randomization
+    ANTE_BB_CANDIDATES = [0.5, 1.0, 2.0]
+
+    # 初始筹码（BB，LogUniform）
+    STACK_BB_MIN = 20
+    STACK_BB_MAX = 300
+
+    # 是否允许第一轮看牌后 1 倍下注
+    FIRST_ROUND_SEEN_CAN_BET_ONE = True
+
+
+# ============================================================
+# 2. State Config
+# ============================================================
+
+class StateConfig:
     """
-    ============================================================
-    A30 Hybrid Training Config
-    ============================================================
-
-    设计目标：
-    - 同一套代码：
-        * CPU 能稳定长跑（PSRO / CE）
-        * GPU 能高吞吐训练（Self-Play / PSRO 后期）
-    - 参数全部为「经验 + 实测」而非随意拍脑袋
-
-    适用任务：
-    - 德州扑克 / 炸金花
-    - Counter-Exploit（CE-1 / CE-2 / CE-3）
-    - PSRO-1 / PSRO-2 / PSRO-3
-
-    ⚠️ 重要原则：
-    - 标注为【结构性参数】的，修改后必须全部重训
-    - 标注为【稳定性参数】的，影响是否“卡死 / 爆炸 / 振荡”
-    ============================================================
+    状态维度必须与 ZJHEnvMulti2to9.state_dim 完全一致
     """
 
-    # ============================================================
-    # 一、环境 & 网络结构（【结构性参数】）
-    # ============================================================
+    STATE_DIM = 49
 
-    # 环境返回给 agent 的状态向量维度
-    # 对应：ZJHEnvMulti14_8p._get_state()
-    #
-    # ⚠️ 修改它 = 网络输入层改变 = 所有历史模型全部失效
-    state_dim: int = 49
+    # 是否使用归一化（推荐保持 True）
+    NORMALIZE_STACK = True
+    NORMALIZE_POT = True
 
-    # 动作空间大小
-    # a00 ~ a13，一共 14 个动作
-    #
-    # ⚠️ 改它 = policy head 结构变化 = 必须重训
-    action_dim: int = 14
+    # 防止除零
+    EPS = 1e-6
 
-    # 折扣因子 γ
-    #
-    # 含义：
-    # - 越接近 1 → 越重视「整局 / 多轮」长期 EV
-    # - 非常适合：
-    #     * 扑克
-    #     * 多轮下注
-    #     * Exploit / Counter-Exploit
-    #
-    # 实战经验：
-    # - 0.99：稳定、偏 GTO / PSRO
-    # - 0.95：短期 aggressive 行为变多，EV 方差明显上升
-    gamma: float = 0.99
 
-    # ============================================================
-    # 二、训练规模（【结构性参数】）
-    # ============================================================
+# ============================================================
+# 3. Action Config
+# ============================================================
 
-    # 总训练局数
-    # PSRO / CE 都是「慢热型」，50 万是经验下限
-    total_episodes: int = 500_000
+class ActionConfig:
+    """
+    动作语义（必须与 env / agent / mask 完全一致）
+    """
 
-    # 每一局最多 env.step 次数
-    #
-    # 作用：
-    # - 防止对手死循环
-    # - 防止异常状态卡死
-    #
-    # 对 8 人炸金花来说：
-    # - 正常一局：< 100 step
-    # - 200 是「绝对安全上限」
-    max_steps_per_episode: int = 200
+    ACTION_DIM = 14
 
-    # ============================================================
-    # 三、设备自适应（CPU / GPU）
-    # ============================================================
+    ACTION_MEANINGS = {
+        0: "FOLD",
+        1: "LOOK",
+        2: "BET_1",
+        3: "BET_2",
+        4: "BET_3",
+        5: "BET_4",
+        6: "BET_5",
+        7: "BET_6",
+        8: "BET_7",
+        9: "BET_8",
+        10: "BET_9",
+        11: "BET_10",
+        12: "PK",
+        13: "COMPARE_ALL",
+    }
 
-    # 主计算设备
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    has_gpu: bool = torch.cuda.is_available()
 
-    # ============================================================
-    # 四、Batch / 学习频率（【稳定性参数】）
-    # ============================================================
+# ============================================================
+# 4. Agent (A30) Config
+# ============================================================
 
-    # batch_size
-    #
-    # GPU：
-    # - 1024：高吞吐、低梯度噪声
-    #
-    # CPU：
-    # - 256：防止反向传播拖垮系统
-    batch_size: int = 1024 if torch.cuda.is_available() else 256
+class AgentConfig:
+    # 网络结构
+    HIDDEN_DIM = 256
 
-    # 每多少 step 进行一次 learn
-    #
-    # GPU：
-    # - 每 step 学一次，最大化吞吐
-    #
-    # CPU：
-    # - 每 2 step 学一次，减少反向传播压力
-    learn_interval: int = 1 if torch.cuda.is_available() else 2
-
-    # ============================================================
-    # 五、优化器参数（【稳定性参数】）
-    # ============================================================
+    # 折扣因子
+    GAMMA = 0.99
 
     # 学习率
-    #
-    # GPU：
-    # - batch 大、梯度稳定 → lr 可稍大
-    #
-    # CPU：
-    # - batch 小 → lr 必须保守
-    lr: float = 1e-4 if torch.cuda.is_available() else 6e-5
+    LR = 3e-4
 
-    # 权重衰减
-    # 对 DQN 系列基本没收益，保持 0
-    weight_decay: float = 0.0
+    # epsilon-greedy
+    EPSILON_START = 1.0
+    EPSILON_END = 0.05
+    EPSILON_DECAY_STEPS = 300_000
 
-    # ============================================================
-    # 六、Replay Buffer（【稳定性 + 多策略记忆】）
-    # ============================================================
-
-    # Replay Buffer 容量
-    #
-    # GPU：
-    # - 600k：能覆盖多个 PSRO 阶段
-    #
-    # CPU：
-    # - 300k：内存 + 速度平衡
-    #
-    # 目的：
-    # - 防止新策略过快覆盖旧策略
-    # - 保留 exploit 历史
-    buffer_capacity: int = 600_000 if torch.cuda.is_available() else 300_000
-
-    # ============================================================
-    # 七、PER（Prioritized Experience Replay）
-    # ============================================================
-
-    # TD-error 权重系数
-    # 0.6 是 DQN / Rainbow 系列的经典值
-    per_alpha: float = 0.6
-
-    # importance-sampling beta
-    #
-    # 从「有偏探索」→「无偏收敛」
-    # 400k steps 正好覆盖：
-    # - Self-Play
-    # - PSRO 中后期
-    per_beta_start: float = 0.4
-    per_beta_end: float = 1.0
-    per_beta_anneal_steps: int = 400_000
-
-    # ============================================================
-    # 八、Target Network 更新
-    # ============================================================
-
-    # target 网络同步频率
-    #
-    # GPU：
-    # - 更新快，收敛速度高
-    #
-    # CPU：
-    # - 更新慢，避免 value 震荡
-    target_update_freq: int = 1000 if torch.cuda.is_available() else 2000
-
-    # ============================================================
-    # 九、epsilon（主要用于日志 & 分析）
-    # ============================================================
-
-    # 实际训练中：
-    # - Exploit / PSRO 多数用固定 eps（如 0.01~0.025）
-    #
-    # 这里主要用于：
-    # - 日志
-    # - 可视化
-    eps_start: float = 0.05
-    eps_end: float = 0.01
-    eps_decay_episodes: int = 400_000
-
-    # ============================================================
-    # 十、梯度稳定性
-    # ============================================================
+    # target network
+    TARGET_UPDATE_INTERVAL = 5_000
 
     # 梯度裁剪
-    #
-    # GPU：
-    # - 梯度更稳定 → 裁剪更严格
-    #
-    # CPU：
-    # - batch 小 → 允许更大裁剪
-    max_grad_norm: float = 5.0 if torch.cuda.is_available() else 10.0
+    MAX_GRAD_NORM = 10.0
 
-    # 梯度累积
-    #
-    # GPU：
-    # - 2 step 累积 ≈ 更大 batch
-    #
-    # CPU：
-    # - 关闭，避免延迟
-    grad_accumulate_steps: int = 2 if torch.cuda.is_available() else 1
 
-    # ============================================================
-    # 十一、日志 & 评估频率
-    # ============================================================
+# ============================================================
+# 5. Replay Buffer (PER)
+# ============================================================
 
-    # 训练日志频率
-    log_interval: int = 5000
+class ReplayBufferConfig:
+    # 容量
+    CAPACITY = 300_000
 
-    # PSRO / CE 评估频率
-    eval_interval: int = 20000
+    # Prioritized Experience Replay
+    PER_ALPHA = 0.6
+    PER_BETA_START = 0.4
+    PER_BETA_FRAMES = 500_000
 
-    # ============================================================
-    # 十二、随机性控制
-    # ============================================================
+    # 训练起始阈值
+    MIN_BUFFER_SIZE = 10_000
 
-    # 全局随机种子
-    seed: int = 42
+    # batch size
+    BATCH_SIZE = 64
 
-    # ============================================================
-    # 十三、Population（PSRO 专用）
-    # ============================================================
 
-    # Population 准入阈值
-    #
-    # score = worstEV + α * avgEV
-    #
-    # 为什么是 -25？
-    # - 实测：
-    #     worstEV 常在 -30 ~ -40
-    # - 但这些策略：
-    #     * 仍能 exploit 特定对手
-    #     * 对 PSRO 多样性非常重要
-    #
-    # 建议策略：
-    # - PSRO-1 / 2：-25
-    # - PSRO-3 后期：逐步收紧到 -15 / -10
-    min_pop_score: float = -15.0
+# ============================================================
+# 6. Training Config
+# ============================================================
 
-    # 每次评估的对局数
-    eval_episodes: int = 5_000
+class TrainingConfig:
+    # 总训练步数（可无限跑）
+    MAX_STEPS = 50_000_000
 
-    # 并行评估环境数
-    eval_envs: int = 32
+    # 模型保存
+    SAVE_INTERVAL_STEPS = 20_000
+    SAVE_DIR = "models"
+
+    # 日志
+    LOG_INTERVAL_EPISODES = 50
+
+    # 是否启用 CUDA
+    USE_CUDA = True
+
+
+# ============================================================
+# 7. PSRO Config
+# ============================================================
+
+class PSROConfig:
+    """
+    Population-based Self-Play
+    """
+
+    # PSRO 轮数（例如 PSRO-5）
+    POPULATION_SIZE = 5
+
+    # 对手池是否动态扩展
+    DYNAMIC_POOL = True
+
+    # 新策略加入池的条件（step）
+    ADD_NEW_POLICY_INTERVAL = 2_000_000
+
+
+# ============================================================
+# 8. Evaluation Config
+# ============================================================
+
+class EvalConfig:
+    # 每次评估局数
+    NUM_EPISODES = 2_000
+
+    # 是否禁用探索
+    DETERMINISTIC = True
+
+    # 是否打印关键行为
+    VERBOSE = False
+
+
+# ============================================================
+# 9. Reward Shaping（可选）
+# ============================================================
+
+class RewardConfig:
+    """
+    默认保持最原始 reward：
+      win  = pot - hero_contrib
+      lose = -hero_contrib
+
+    下面是可选增强项（当前建议先关闭）
+    """
+
+    ENABLE_SHAPING = False
+
+    # 第一轮拖延惩罚
+    STEP_PENALTY = -0.001
+
+    # 第一轮弃弱牌奖励
+    WEAK_HAND_FOLD_BONUS = 0.01
+
+
+# ============================================================
+# 10. Utils
+# ============================================================
+
+def sample_starting_stack_bb():
+    """
+    LogUniform 采样初始筹码（BB）
+    """
+    lo = math.log(EnvConfig.STACK_BB_MIN)
+    hi = math.log(EnvConfig.STACK_BB_MAX)
+    return math.exp(lo + (hi - lo) * math.random())

@@ -1,9 +1,8 @@
 import random
 from ZJHEnvMulti2to9 import OppAct, evaluate_hand
 
-
 # ==========================================================
-# 牌力评估（0~1）
+# 牌力评估（0~1，保持原粗粒度） 对手系统（PSRO）
 # ==========================================================
 
 def strength(cards):
@@ -33,21 +32,34 @@ def stack_bucket(bb):
     return "deep"
 
 
+def min_required_unit(env, p):
+    return env._min_required_unit(p)
+
+
+def min_required_pay(env, p):
+    u = min_required_unit(env, p)
+    return u * env.ante_bb * (2 if p["has_seen"] else 1)
+
+
+def can_bet(env, p):
+    return p["stack_bb"] >= min_required_pay(env, p)
+
+
+def safe_pk(env):
+    return env.round_index > 0
+
+
 # ==========================================================
-# Base Class（BB-aware）
+# Base Class
 # ==========================================================
 
 class BaseOpponent:
-    """
-    BB-aware 对手基类
-    """
-
     def decide(self, env, idx):
         raise NotImplementedError
 
 
 # ==========================================================
-# 1. NitOpponent（BB-aware 紧弱）
+# 1. NitOpponent（紧弱）
 # ==========================================================
 
 class NitOpponent(BaseOpponent):
@@ -55,75 +67,53 @@ class NitOpponent(BaseOpponent):
     def decide(self, env, idx):
         p = env.players[idx]
         s = strength(p["cards"])
+        bucket = stack_bucket(p["stack_bb"])
 
-        need = env.max_bet_bb - p["bet_bb"]
-        stack_bb = p["stack_bb"]
-        ante = env.ante_bb
-        bucket = stack_bucket(stack_bb)
+        # 筹码不足
+        if not can_bet(env, p):
+            return (OppAct.COMPARE_ALL, None) if safe_pk(env) else (OppAct.FOLD, None)
 
-        # short stack：极度保守
+        umin = min_required_unit(env, p)
+
+        # short：非常保守
         if bucket == "short":
-            if need > 0.3 * stack_bb:
+            if s < 0.55:
                 return OppAct.FOLD, None
-            return OppAct.CALL, None
+            return OppAct.BET, umin
 
-        # mid stack
-        if bucket == "mid":
-            if s < 0.35:
-                if need > ante:
-                    return OppAct.FOLD, None
-                return OppAct.CALL, None
-
-            if s < 0.65:
-                return OppAct.CALL, None
-
-            return OppAct.BET, random.choice([2, 3])
-
-        # deep stack
-        if s < 0.4:
-            return OppAct.CALL, None
-        if s < 0.75:
-            return OppAct.CALL, None
-        return OppAct.BET, random.choice([2, 3])
+        # mid
+        if s < 0.35:
+            return OppAct.FOLD, None
+        if s < 0.65:
+            return OppAct.BET, umin
+        return OppAct.BET, min(umin + 1, 10)
 
 
 # ==========================================================
-# 2. LooseOpponent（BB-aware 松）
+# 2. LooseOpponent（松）
 # ==========================================================
 
 class LooseOpponent(BaseOpponent):
 
     def decide(self, env, idx):
         p = env.players[idx]
-        s = strength(p["cards"])
+        bucket = stack_bucket(p["stack_bb"])
 
-        need = env.max_bet_bb - p["bet_bb"]
-        stack_bb = p["stack_bb"]
-        bucket = stack_bucket(stack_bb)
+        if not can_bet(env, p):
+            return OppAct.COMPARE_ALL, None
 
-        # short stack：call-heavy
+        umin = min_required_unit(env, p)
+
         if bucket == "short":
-            if need > 0.6 * stack_bb:
-                return OppAct.FOLD, None
-            return OppAct.CALL, None
+            return OppAct.BET, umin
 
-        # mid stack
-        if bucket == "mid":
-            if random.random() < 0.75:
-                return OppAct.CALL, None
-            return OppAct.BET, random.randint(2, 4)
-
-        # deep stack
-        r = random.random()
-        if r < 0.65:
-            return OppAct.CALL, None
-        if r < 0.85:
-            return OppAct.BET, random.randint(3, 6)
-        return OppAct.PK, None
+        if random.random() < 0.65:
+            return OppAct.BET, umin
+        return OppAct.BET, min(umin + random.randint(1, 3), 10)
 
 
 # ==========================================================
-# 3. AggroOpponent（BB-aware 激进）
+# 3. AggroOpponent（激进）
 # ==========================================================
 
 class AggroOpponent(BaseOpponent):
@@ -131,88 +121,70 @@ class AggroOpponent(BaseOpponent):
     def decide(self, env, idx):
         p = env.players[idx]
         s = strength(p["cards"])
-        stack_bb = p["stack_bb"]
-        bucket = stack_bucket(stack_bb)
+        bucket = stack_bucket(p["stack_bb"])
 
-        # short stack：避免自杀
+        if not can_bet(env, p):
+            return OppAct.COMPARE_ALL, None
+
+        umin = min_required_unit(env, p)
+
         if bucket == "short":
-            if s > 0.55:
+            if s > 0.6 and safe_pk(env):
                 return OppAct.PK, None
-            return OppAct.CALL, None
+            return OppAct.BET, umin
 
-        # mid stack
-        if bucket == "mid":
-            r = random.random()
-            if r < 0.4:
-                return OppAct.BET, random.randint(3, 6)
-            if r < 0.8:
-                return OppAct.CALL, None
-            return OppAct.PK, None
-
-        # deep stack
         r = random.random()
-        if r < 0.55:
-            return OppAct.BET, random.randint(5, 8)
-        if r < 0.85:
+        if r < 0.5:
+            return OppAct.BET, min(umin + random.randint(1, 3), 10)
+        if r < 0.75 and safe_pk(env):
             return OppAct.PK, None
-        return OppAct.CALL, None
+        return OppAct.BET, umin
 
 
 # ==========================================================
-# 4. FishOpponent（BB-aware 鱼）
+# 4. FishOpponent（鱼）
 # ==========================================================
 
 class FishOpponent(BaseOpponent):
 
     def decide(self, env, idx):
         p = env.players[idx]
-        stack_bb = p["stack_bb"]
-        bucket = stack_bucket(stack_bb)
 
-        # short stack：乱 call
-        if bucket == "short":
-            if random.random() < 0.85:
-                return OppAct.CALL, None
+        if not can_bet(env, p):
             return OppAct.FOLD, None
 
-        # mid stack
-        if random.random() < 0.85:
-            return OppAct.CALL, None
-        return OppAct.BET, 2
+        umin = min_required_unit(env, p)
 
-        # deep stack（基本不 PK）
+        if random.random() < 0.8:
+            return OppAct.BET, umin
+        return OppAct.BET, min(umin + 1, 10)
 
 
 # ==========================================================
-# 5. ManiacOpponent（BB-aware 疯子）
+# 5. ManiacOpponent（疯子）
 # ==========================================================
 
 class ManiacOpponent(BaseOpponent):
 
     def decide(self, env, idx):
         p = env.players[idx]
-        stack_bb = p["stack_bb"]
-        bucket = stack_bucket(stack_bb)
 
-        # short stack：少乱来
-        if bucket == "short":
-            if random.random() < 0.7:
-                return OppAct.CALL, None
+        if not can_bet(env, p):
+            return OppAct.COMPARE_ALL, None
+
+        umin = min_required_unit(env, p)
+
+        if random.random() < 0.6:
+            return OppAct.BET, min(umin + random.randint(2, 5), 10)
+
+        if safe_pk(env):
             return OppAct.PK, None
 
-        # mid stack
-        if random.random() < 0.6:
-            return OppAct.BET, random.randint(4, 7)
-        return OppAct.PK, None
-
-        # deep stack
-        if random.random() < 0.7:
-            return OppAct.BET, random.randint(6, 10)
-        return OppAct.PK, None
+        return OppAct.BET, umin
 
 
 # ==========================================================
-# 6. TAGOpponent（BB-aware 紧凶）
+# 6. TAGOpponent（紧凶）
 # ==========================================================
 
 class TAGOpponent(BaseOpponent):
@@ -220,30 +192,21 @@ class TAGOpponent(BaseOpponent):
     def decide(self, env, idx):
         p = env.players[idx]
         s = strength(p["cards"])
-        stack_bb = p["stack_bb"]
-        bucket = stack_bucket(stack_bb)
 
-        # short stack
-        if bucket == "short":
-            if s > 0.6:
-                return OppAct.PK, None
-            return OppAct.CALL, None
+        if not can_bet(env, p):
+            return OppAct.COMPARE_ALL, None
 
-        # mid stack
+        umin = min_required_unit(env, p)
+
         if s < 0.35:
             return OppAct.FOLD, None
         if s < 0.65:
-            return OppAct.CALL, None
-        return OppAct.BET, random.choice([3, 4, 5])
-
-        # deep stack
-        if s < 0.4:
-            return OppAct.CALL, None
-        return OppAct.BET, random.choice([3, 4, 5])
+            return OppAct.BET, umin
+        return OppAct.BET, min(umin + random.randint(1, 2), 10)
 
 
 # ==========================================================
-# 7. GTOOpponent（BB-aware GTO-lite）
+# 7. GTOOpponent（GTO-lite）
 # ==========================================================
 
 class GTOOpponent(BaseOpponent):
@@ -251,25 +214,14 @@ class GTOOpponent(BaseOpponent):
     def decide(self, env, idx):
         p = env.players[idx]
         s = strength(p["cards"])
-        stack_bb = p["stack_bb"]
-        bucket = stack_bucket(stack_bb)
 
-        # short stack：偏保守
-        if bucket == "short":
-            if s > 0.6:
-                return OppAct.PK, None
-            return OppAct.CALL, None
+        if not can_bet(env, p):
+            return OppAct.COMPARE_ALL, None
 
-        # mid stack
+        umin = min_required_unit(env, p)
+
         if s < 0.3:
-            return OppAct.FOLD, None if random.random() < 0.6 else (OppAct.CALL, None)
+            return OppAct.FOLD, None
         if s < 0.6:
-            return OppAct.CALL, None
-        return OppAct.BET, random.choice([2, 3, 4])
-
-        # deep stack
-        if s < 0.35:
-            return OppAct.CALL, None
-        if s < 0.7:
-            return OppAct.CALL, None
-        return OppAct.BET, random.choice([3, 4, 5])
+            return OppAct.BET, umin
+        return OppAct.BET, min(umin + random.choice([1, 2, 3]), 10)

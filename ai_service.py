@@ -1,187 +1,231 @@
-# ai_service.py
-from typing import Dict, Any
-import numpy as np
 import torch
+import numpy as np
+from typing import Any, Dict, Optional, List, Tuple
 
-from agent_a30 import a30Agent
-from config_a30_hybrid import A30ConfigHybrid
-from difficulty_policy import DifficultyPolicy, Difficulty
-from state_builder_normalized import ZJHStateBuilder49Normalized
-
-
-# ============================================================
-# 动作常量（必须与训练环境一致）
-# ============================================================
-
-FOLD = 0
-CALL = 1
-LOOK = 2
-BET_2X = 3
-BET_3X = 4
-BET_4X = 5
-BET_5X = 6
-BET_6X = 7
-BET_7X = 8
-BET_8X = 9
-BET_9X = 10
-BET_10X = 11
-PK_ONE = 12
-COMPARE_ALL = 13
-
-
-ACTION_NAMES = {
-    0: "FOLD",
-    1: "CALL",
-    2: "LOOK",
-    3: "BET_2X",
-    4: "BET_3X",
-    5: "BET_4X",
-    6: "BET_5X",
-    7: "BET_6X",
-    8: "BET_7X",
-    9: "BET_8X",
-    10: "BET_9X",
-    11: "BET_10X",
-    12: "PK_ONE",
-    13: "COMPARE_ALL",
-}
+from ZJHEnvMulti2to9 import ZJHEnvMulti2to9
+from agent_a30 import A30Agent
+from state_builder_normalized import build_state
 
 
 # ============================================================
-# AI Service（生产级）
+# Action Mask（与训练一致，含兜底）
+# ============================================================
+
+def build_action_mask(env: ZJHEnvMulti2to9) -> np.ndarray:
+    mask = [1] * env.action_dim
+    hero = env.players[0]
+
+    # 第一轮禁止 PK
+    if env.round_index == 0:
+        mask[12] = 0
+
+    # 已看牌不能再 LOOK（注意：你环境 action=1 是 LOOK）
+    if hero["has_seen"]:
+        mask[1] = 0
+
+    # 最低下注倍数 & 最低支付金额
+    min_unit = env._min_required_unit(hero)
+    min_pay = min_unit * env.ante_bb * (2 if hero["has_seen"] else 1)
+
+    # 筹码不足 → 禁止所有 BET（action 2..11 对应 BET_1..BET_10）
+    if hero["stack_bb"] < min_pay:
+        for a in range(2, 12):
+            mask[a] = 0
+    else:
+        for a in range(2, 12):
+            unit = a - 1
+            if unit < min_unit:
+                mask[a] = 0
+
+    # 兜底：至少允许 FOLD
+    if sum(mask) == 0:
+        mask[0] = 1
+
+    return np.array(mask, dtype=np.float32)
+
+
+# ============================================================
+# AI Service（线上推理版：decide(payload) 一步到位）
 # ============================================================
 
 class ZJHAIService:
+    """
+    用途：
+      - 线上实时决策（HTTP / WS）
+      - 每次 decide(payload) 都以 payload 为准覆盖 env 状态
+      - 与训练 100% 同构（state_builder_normalized + action mask）
 
-    def __init__(self, model_path: str):
-        # ---- load model once ----
-        self.cfg = A30ConfigHybrid()
-        self.agent = a30Agent(self.cfg)
+    注意：
+      - 一个实例可以服务多次请求，但每次都会覆盖 env
+      - 如果你要做“同一局多次 step 推进”，请用 step()，并不要每次都传 payload 覆盖
+    """
+
+    def __init__(self, model_path: str, device: str = "cpu"):
+        self.device = torch.device(device)
+
+        self.env = ZJHEnvMulti2to9()
+
+        self.agent = A30Agent(
+            state_dim=self.env.state_dim,   # 54
+            action_dim=self.env.action_dim,
+            device=self.device,
+        )
         self.agent.load(model_path)
+        self.agent.epsilon = 0.0
+        # 你的 A30Agent 用的是 target_q_net 命名
+        if hasattr(self.agent, "set_eval"):
+            self.agent.set_eval()
+        else:
+            # 兜底
+            if hasattr(self.agent, "q_net"):
+                self.agent.q_net.eval()
+            if hasattr(self.agent, "target_q_net"):
+                self.agent.target_q_net.eval()
 
-        self.agent.policy_net.eval()
-        self.agent.target_net.eval()
+    # --------------------------------------------------------
+    # 工具：把 cards 统一转成 List[Tuple[int,int]]
+    # --------------------------------------------------------
 
-        # ---- helpers ----
-        self.state_builder = ZJHStateBuilder49Normalized()
-        self.difficulty_policy = DifficultyPolicy(self.agent)
-
-        # ---- deterministic inference ----
-        torch.manual_seed(self.cfg.seed)
-        np.random.seed(self.cfg.seed)
-
-    # ========================================================
-    # LOOK 两阶段决策（核心）
-    # ========================================================
-
-    def _handle_look(self, raw_action: int, payload: Dict[str, Any]) -> Dict[str, Any] | None:
+    @staticmethod
+    def _normalize_cards(cards: Any) -> Optional[List[Tuple[int, int]]]:
         """
-        如果触发 LOOK 且尚未看牌：
-        - 返回 sideEffect=LOOK
-        - 不返回真实 action
-        - 上层应立即更新 has_looked 并重新请求 AI
+        允许：
+          - [(14,0),(13,1),(12,2)]
+          - [[14,0],[13,1],[12,2]]
+        返回：
+          - [(14,0),(13,1),(12,2)]
         """
-        if raw_action == LOOK and not payload.get("has_looked", False):
-            return {
-                "action": -1,                 # NO_ACTION
-                "actionName": "NO_ACTION",
-                "sideEffect": "LOOK",
-            }
-        return None
+        if cards is None:
+            return None
+        if not isinstance(cards, (list, tuple)):
+            raise ValueError(f"cards must be list/tuple, got {type(cards)}")
 
-    # ========================================================
-    # BET 合法性裁剪（核心）
-    # ========================================================
+        out: List[Tuple[int, int]] = []
+        for c in cards:
+            if not isinstance(c, (list, tuple)) or len(c) != 2:
+                raise ValueError(f"invalid card item: {c}, expected [rank,suit] or (rank,suit)")
+            r = int(c[0])
+            s = int(c[1])
+            out.append((r, s))
 
-    def _min_raise_multiplier(self, payload: Dict[str, Any]) -> int:
-        """
-        计算当前最小合法加注倍数（基于 ante）
-        """
-        ante = float(payload.get("ante", 1))
-        if ante <= 0:
-            return 0
+        return out
 
-        max_bet = float(payload.get("max_bet", 0))
-        hero_bet = float(payload.get("hero_bet", 0))
+    # --------------------------------------------------------
+    # 外部状态 → env（核心）
+    # --------------------------------------------------------
 
-        need = max(0.0, max_bet - hero_bet)
-        # 向上取整
-        return int((need + ante - 1) // ante)
+    def load_external_state(self, external_state: Dict[str, Any]) -> None:
+        env = self.env
 
-    def _apply_bet_constraints(self, action: int, payload: Dict[str, Any]) -> int:
-        """
-        防止出现：
-        - 已有较高下注，却返回 BET_2X / BET_3X 等非法动作
-        """
-        if action < BET_2X or action > BET_10X:
-            return action
+        if "ante_bb" not in external_state:
+            raise ValueError("missing required field: ante_bb")
+        if "players" not in external_state:
+            raise ValueError("missing required field: players")
 
-        # action 3~11 → 倍数 2~10
-        mult = action - 1
-        min_mult = self._min_raise_multiplier(payload)
+        # ---------- 基础参数 ----------
+        env.ante_bb = float(external_state["ante_bb"])
+        env.round_index = int(external_state.get("round_index", 0))
+        env.current_bet_unit = int(external_state.get("current_bet_unit", 1))
+        env.first_round_open_unit = bool(external_state.get("first_round_open_unit", False))
 
-        if mult < min_mult:
-            # 升级到最小合法倍数
-            new_mult = min(min_mult, 10)
-            return new_mult + 1
+        players_in = external_state["players"]
+        if not isinstance(players_in, list) or len(players_in) < 2:
+            raise ValueError("players must be a list with at least 2 players (hero + opponents)")
 
-        return action
+        env.num_players = len(players_in)
 
-    # ========================================================
-    # 基础规则兜底
-    # ========================================================
+        # ---------- players ----------
+        env.players = []
+        for i, p in enumerate(players_in):
+            if not isinstance(p, dict):
+                raise ValueError(f"players[{i}] must be object/dict")
 
-    def _apply_basic_constraints(self, action: int, payload: Dict[str, Any]) -> int:
-        """
-        一些不会破坏策略的最小规则兜底
-        """
-        # 已看牌，不允许再 LOOK
-        if payload.get("has_looked", False) and action == LOOK:
-            return CALL
+            cards = self._normalize_cards(p.get("cards"))
+            # hero 必须有 cards
+            if i == 0 and (cards is None or len(cards) != 3):
+                raise ValueError("hero (players[0]) must provide 3 cards")
 
-        # 无筹码，不允许下注 / PK
-        if payload.get("chips", 0) <= 0 and action >= BET_2X:
-            return CALL
+            env.players.append({
+                "cards": cards,
+                "stack_bb": float(p.get("stack_bb", 0.0)),
+                "bet_bb": float(p.get("bet_bb", 0.0)),
+                "alive": bool(p.get("alive", True)),
+                "has_seen": bool(p.get("has_seen", False)),
+                "last_act": int(p.get("last_act", 0)),
+                "contrib_bb": float(p.get("bet_bb", 0.0)),
+            })
 
-        return action
+        # ---------- 补齐空位 ----------
+        while len(env.players) < env.max_players:
+            env.players.append({
+                "cards": None,
+                "stack_bb": 0.0,
+                "bet_bb": 0.0,
+                "alive": False,
+                "has_seen": False,
+                "last_act": 0,
+                "contrib_bb": 0,
+            })
 
-    # ========================================================
-    # 对外接口
-    # ========================================================
+        # ---------- 全局缓存字段（必须重算） ----------
+        env.alive_cnt = sum(1 for p in env.players[:env.num_players] if p["alive"])
+        env.max_bet_bb = max((p["bet_bb"] for p in env.players[:env.num_players] if p["alive"]), default=0.0)
+        env.pot_bb = sum(p["bet_bb"] for p in env.players[:env.num_players])
+
+        # ---------- Hero 牌力缓存 ----------
+        env._cache_hero_hand()
+
+    # --------------------------------------------------------
+    # AI 决策（✅接收 payload，一步到位）
+    # --------------------------------------------------------
 
     def decide(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        payload: 你现在设计的线上标准参数
+        payload：外部传入的牌局状态快照（见 load_external_state）
+        返回：
+          {
+            "action": int,
+            "action_name": str,
+            "mask": [...],
+          }
         """
-        # ---- build state ----
-        state = self.state_builder.build(payload)
+        # 1) 先用 payload 覆盖 env
+        self.load_external_state(payload)
 
-        # ---- difficulty ----
-        diff_str = payload.get("difficulty", "hard").lower()
-        difficulty = (
-            Difficulty(diff_str)
-            if diff_str in Difficulty._value2member_map_
-            else Difficulty.HARD
-        )
+        # 2) 与训练一致：build_state + mask
+        state = build_state(self.env)
+        mask = build_action_mask(self.env)
 
-        # ---- model decision ----
-        raw_action = self.difficulty_policy.select(state, difficulty)
+        # 3) 选动作
+        action = self.agent.select_action(state, mask)
 
-        # ---- LOOK 两阶段处理 ----
-        look_resp = self._handle_look(raw_action, payload)
-        if look_resp is not None:
-            look_resp["difficulty"] = difficulty.value
-            return look_resp
-
-        # ---- BET 合法性裁剪 ----
-        action = self._apply_bet_constraints(raw_action, payload)
-
-        # ---- 基础规则兜底 ----
-        action = self._apply_basic_constraints(action, payload)
-
-        # ---- final ----
         return {
             "action": int(action),
-            "actionName": ACTION_NAMES.get(action, "UNKNOWN"),
-            "difficulty": difficulty.value,
+            "action_name": self._action_to_name(int(action)),
+            "mask": mask.tolist(),
         }
+
+    # --------------------------------------------------------
+    # 可选：服务端推进一步（调试 / 模拟）
+    # --------------------------------------------------------
+
+    def step(self, action: int):
+        return self.env.step(action)
+
+    # --------------------------------------------------------
+    # 工具
+    # --------------------------------------------------------
+
+    @staticmethod
+    def _action_to_name(action: int) -> str:
+        if action == 0:
+            return "FOLD"
+        if action == 1:
+            return "LOOK"
+        if 2 <= action <= 11:
+            return f"BET_{action-1}"
+        if action == 12:
+            return "PK"
+        if action == 13:
+            return "COMPARE_ALL"
+        return "UNKNOWN"
