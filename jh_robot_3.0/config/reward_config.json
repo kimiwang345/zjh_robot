@@ -1,0 +1,44 @@
+{
+  "base_cost": {
+    "bet": -0.02,
+    "pk": -0.01
+  },
+
+  "small_hand_penalty": {
+    "enabled": true,
+    "hand_cat_max": 1,
+    "aggressive_ratio": [
+      { "gte": 3.0, "penalty": -0.25 },
+      { "gte": 2.0, "penalty": -0.15 }
+    ],
+    "extra_bet_penalty": -0.1,
+    "pk_bonus": 0.05
+  },
+
+  "mid_hand_penalty": {
+    "enabled": true,
+    "hand_cat": 2,
+    "aggressive_ratio_gte": 3.0,
+    "penalty": -0.1
+  },
+
+  "early_round_control": {
+    "enabled": true,
+    "round_lte": 3,
+    "aggressive_mul_ratio": 2.0,
+    "penalty": -0.1
+  },
+
+  "terminal_reward": {
+    "enabled": true,
+    "scale": 1.0
+  },
+  "strong_hand_bonus": {
+    "enabled": true,
+    "hand_cat_min": 4,
+    "bet_bonus": 0.8,
+    "pk_bonus": 0.05,
+    "fold_penalty": -0.3
+  }
+
+}

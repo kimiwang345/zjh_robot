@@ -1,191 +1,240 @@
 from __future__ import annotations
 import argparse
 import random
+import time
 from collections import deque
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.optim as optim
 
-from zjh_constants import GameConfig
 from zjh_env import ZJHEnv
-from opponents import TightOpponent, AggroOpponent, MixedOpponent
+from zjh_constants import GameConfig
 
 from agent_dqn import (
-    obs_to_vector, encode_actions,
-    QNet, ReplayBuffer,
+    QNet,
+    ReplayBuffer,
+    obs_to_vector,
+    encode_actions,
     select_action_epsilon_greedy,
 )
 
-def pick_opponent(rng: random.Random):
-    r = rng.random()
-    if r < 0.34:
-        return TightOpponent(rng)
-    if r < 0.67:
-        return MixedOpponent(rng)
-    return AggroOpponent(rng)
+from buddy_ai import decide_action_buddy, BuddyAIConfig
 
+
+# ======================================================
+# Utils
+# ======================================================
+def linear_decay(step, start, end, decay_steps):
+    if step >= decay_steps:
+        return end
+    return start + (end - start) * (step / decay_steps)
+
+
+# ======================================================
+# Train
+# ======================================================
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--episodes", type=int, default=50000)
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--base", type=int, default=1)
-    ap.add_argument("--init_stack", type=int, default=200)
-    ap.add_argument("--device", type=str, default="cpu")
-
-    ap.add_argument("--lr", type=float, default=3e-4)
-    ap.add_argument("--gamma", type=float, default=0.99)
-    ap.add_argument("--buffer_size", type=int, default=200000)
-    ap.add_argument("--batch_size", type=int, default=256)
-    ap.add_argument("--learning_starts", type=int, default=2000)
-    ap.add_argument("--train_every", type=int, default=1)
-    ap.add_argument("--target_update", type=int, default=1000)
-
-    ap.add_argument("--eps_start", type=float, default=1.0)
-    ap.add_argument("--eps_end", type=float, default=0.05)
-    ap.add_argument("--eps_decay_episodes", type=int, default=20000)
-
-    ap.add_argument("--save_every", type=int, default=5000)
-    ap.add_argument("--model_out", type=str, default="qnet_zjh_2p_ddqn.pt")
-
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--episodes", type=int, default=30000)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--device", type=str, default="cpu")
+    args = parser.parse_args()
 
     rng = random.Random(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    # ===== 固定 2 人桌 =====
+    device = torch.device(args.device)
+
+    # ======================================================
+    # Game Config（2 人桌示例，可自行改）
+    # ======================================================
     cfg = GameConfig(
         num_players=2,
-        base=args.base,
-        init_stack=args.init_stack,
-        seed=args.seed
+        init_stack=5000,
+        base=10,
+        max_rounds=20,
+        seed=args.seed,
     )
+
     env = ZJHEnv(cfg)
-    env.reset(seed=args.seed, hero_seat=0)
 
-    obs_dim = len(obs_to_vector(env.get_obs(0)))
+    hero_seat = 0
 
-    q = QNet(obs_dim).to(args.device)
-    q_tgt = QNet(obs_dim).to(args.device)
-    q_tgt.load_state_dict(q.state_dict())
-    q_tgt.eval()
+    # ======================================================
+    # BuddyAI（训练期对手）
+    # ======================================================
+    buddy_cfg = BuddyAIConfig(
+        mode="neutral",   # 训练期一定是 neutral
+        strength=0.4,     # 给学习空间
+        seed=123,
+    )
 
-    opt = optim.Adam(q.parameters(), lr=args.lr)
-    rb = ReplayBuffer(args.buffer_size, seed=args.seed)
+    # ======================================================
+    # DQN
+    # ======================================================
+    obs_dim = len(obs_to_vector(env.reset(seed=args.seed, hero_seat=hero_seat)))
 
-    recent_rewards = deque(maxlen=100)
+    qnet = QNet(obs_dim).to(device)
+    tgt_qnet = QNet(obs_dim).to(device)
+    tgt_qnet.load_state_dict(qnet.state_dict())
+    tgt_qnet.eval()
 
-    def eps_by_ep(ep: int) -> float:
-        # 线性衰减
-        if ep >= args.eps_decay_episodes:
-            return args.eps_end
-        t = ep / float(args.eps_decay_episodes)
-        return args.eps_start + (args.eps_end - args.eps_start) * t
+    optimizer = optim.Adam(qnet.parameters(), lr=1e-3)
+
+    buffer = ReplayBuffer(capacity=50000, seed=args.seed)
+
+    gamma = 0.99
+    batch_size = 64
+    start_learn = 1000
+    target_sync = 1000
+
+    # epsilon
+    eps_start = 0.9
+    eps_end = 0.05
+    eps_decay = 15000
+
+    # stats
+    win_hist = deque(maxlen=100)
+    reward_hist = deque(maxlen=100)
 
     global_step = 0
 
+    # ======================================================
+    # Training Loop
+    # ======================================================
     for ep in range(1, args.episodes + 1):
-        env.reset(seed=rng.randrange(1_000_000), hero_seat=0)
-        opp = pick_opponent(rng)
-
+        obs = env.reset(seed=args.seed + ep, hero_seat=hero_seat)
         done = False
+
         ep_reward = 0.0
+        hero_win = 0
 
         while not done:
-            acting = env.acting_seat
+            seat = env.acting_seat
+            obs_s = env.get_obs(seat)
+            legal = env.legal_actions(seat)
 
-            if acting == env.hero_seat:
-                obs = env.get_obs(env.hero_seat)
-                legal = env.legal_actions(env.hero_seat)
+            # ---------------- HERO ----------------
+            if seat == hero_seat:
+                obs_vec = obs_to_vector(obs_s)
                 enc = encode_actions(legal)
-                s = obs_to_vector(obs)
 
-                eps = eps_by_ep(ep)
-                a_idx = select_action_epsilon_greedy(q, s, enc, eps, args.device, rng)
+                eps = linear_decay(
+                    global_step,
+                    eps_start,
+                    eps_end,
+                    eps_decay,
+                )
+
+                a_idx = select_action_epsilon_greedy(
+                    qnet,
+                    obs_vec,
+                    enc,
+                    eps,
+                    device,
+                    rng,
+                )
                 action = enc.actions[a_idx]
 
-                # 执行动作（hero）
-                _, r, done, _ = env.step(env.hero_seat, action)
-                ep_reward += r
+            # ---------------- OPPONENT (BuddyAI) ----------------
+            else:
+                action = decide_action_buddy(
+                    obs_s,
+                    legal,
+                    buddy_cfg,
+                )
 
-                # 下一状态（统一从 hero 视角取 obs）
-                s2 = obs_to_vector(env.get_obs(env.hero_seat))
-                legal2 = env.legal_actions(env.hero_seat)
+            # step
+            obs2, reward, done, info = env.step(seat, action)
+
+            # ---------------- Store transition (HERO only) ----------------
+            if seat == hero_seat:
+                obs2_vec = obs_to_vector(obs2)
+                legal2 = env.legal_actions(hero_seat)
                 enc2 = encode_actions(legal2)
 
-                rb.push(s, enc.mask, a_idx, float(r), s2, enc2.mask, bool(done))
-                global_step += 1
+                buffer.push(
+                    obs_vec,
+                    enc.mask,
+                    a_idx,
+                    reward,
+                    obs2_vec,
+                    enc2.mask,
+                    done,
+                )
 
-                # ===== 训练：Double DQN =====
-                if len(rb) >= args.learning_starts and (global_step % args.train_every == 0):
-                    bs = args.batch_size
-                    S, M, A, R, S2, M2, D = rb.sample(bs)
+                ep_reward += reward
 
-                    S = torch.from_numpy(S).to(args.device)
-                    M = torch.from_numpy(M).to(args.device)     # (B, MAX_ACTIONS)
-                    A = torch.from_numpy(A).to(args.device)     # (B,)
-                    R = torch.from_numpy(R).to(args.device)     # (B,)
-                    S2 = torch.from_numpy(S2).to(args.device)
-                    M2 = torch.from_numpy(M2).to(args.device)
-                    D = torch.from_numpy(D).to(args.device)     # (B,) 0/1
+            global_step += 1
 
-                    # Q(s,a)
-                    q_all = q(S)  # (B, MAX_ACTIONS)
-                    q_sa = q_all.gather(1, A.view(-1, 1)).squeeze(1)  # (B,)
+            # ---------------- Learn ----------------
+            if len(buffer) >= start_learn:
+                (
+                    s,
+                    m,
+                    a,
+                    r,
+                    s2,
+                    m2,
+                    d,
+                ) = buffer.sample(batch_size)
 
-                    with torch.no_grad():
-                        # 1) online 网络在 s' 上选 a*
-                        q2_online = q(S2)  # (B, MAX_ACTIONS)
-                        q2_online = q2_online + (M2 - 1.0) * 1e9
-                        a_star = q2_online.argmax(dim=1)  # (B,)
+                s = torch.tensor(s, device=device)
+                m = torch.tensor(m, device=device)
+                a = torch.tensor(a, device=device)
+                r = torch.tensor(r, device=device)
+                s2 = torch.tensor(s2, device=device)
+                m2 = torch.tensor(m2, device=device)
+                d = torch.tensor(d, device=device)
 
-                        # 2) target 网络在 s' 上评估 Q_tgt(s', a*)
-                        q2_tgt = q_tgt(S2)
-                        q2_tgt = q2_tgt + (M2 - 1.0) * 1e9
-                        q2_val = q2_tgt.gather(1, a_star.view(-1, 1)).squeeze(1)  # (B,)
+                q = qnet(s)                       # (B, MAX_ACTIONS)
+                q = q.gather(1, a.unsqueeze(1)).squeeze(1)
 
-                        target = R + (1.0 - D) * args.gamma * q2_val
+                with torch.no_grad():
+                    q2 = tgt_qnet(s2)
+                    q2[m2 < 0.5] = -1e18
+                    q2_max = q2.max(dim=1)[0]
+                    target = r + gamma * (1 - d) * q2_max
 
-                    loss = torch.mean((q_sa - target) ** 2)
+                loss = nn.MSELoss()(q, target)
 
-                    opt.zero_grad()
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(q.parameters(), 5.0)
-                    opt.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-                    # target network 更新
-                    if global_step % args.target_update == 0:
-                        q_tgt.load_state_dict(q.state_dict())
+                # sync target
+                if global_step % target_sync == 0:
+                    tgt_qnet.load_state_dict(qnet.state_dict())
 
-            else:
-                # 对手动作
-                oobs = env.get_obs(acting)
-                legal = env.legal_actions(acting)
-                action = opp.act(oobs, legal)
-                _, r, done, _ = env.step(acting, action)
-                ep_reward += r
+        # ======================================================
+        # Episode End
+        # ======================================================
+        if env.winner_seat == hero_seat:
+            hero_win = 1
 
-        recent_rewards.append(ep_reward)
+        win_hist.append(hero_win)
+        reward_hist.append(ep_reward)
 
-        # 每 100 局输出统计
         if ep % 100 == 0:
-            avg100 = sum(recent_rewards) / len(recent_rewards)
-            win_rate = sum(1 for x in recent_rewards if x > 0) / len(recent_rewards) * 100.0
-            eps = eps_by_ep(ep)
+            win_rate = sum(win_hist) / len(win_hist)
+            avg_r = sum(reward_hist) / len(reward_hist)
             print(
-                f"[ep {ep}] r={ep_reward:.2f} eps={eps:.3f} | "
-                f"avg100={avg100:.3f} win_rate={win_rate:.1f}% | "
-                f"buf={len(rb)} step={global_step}"
+                f"[EP {ep:6d}] "
+                f"win_rate={win_rate:.3f} "
+                f"avg100_r={avg_r:.3f} "
+                f"eps={eps:.3f} "
+                f"buffer={len(buffer)}"
             )
 
-        # 定期保存
-        if ep % args.save_every == 0:
-            torch.save(q.state_dict(), args.model_out)
-            print(f"[save] {args.model_out}")
+    # ======================================================
+    # Save
+    # ======================================================
+    torch.save(qnet.state_dict(), "dqn_hero.pth")
+    print("Training finished, model saved to dqn_hero.pth")
 
-    torch.save(q.state_dict(), args.model_out)
-    print(f"[done] saved {args.model_out}")
 
 if __name__ == "__main__":
     main()

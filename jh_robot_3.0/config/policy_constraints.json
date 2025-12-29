@@ -1,0 +1,59 @@
+{
+  "version": 1,
+
+  "defaults": {
+    "allow_fold": true,
+    "allow_pk": true,
+    "allow_bet": true,
+
+    "bet_mul_max_ratio": 3.0,
+    "bet_mul_min_ratio": 1.0,
+
+    "force_no_fold_hand_cat_gte": 4,
+    "force_bet_or_pk_hand_cat_gte": 4,
+
+    "strong_hand_min_aggr_ratio": 1.0,
+
+    "early_round_lte": 3,
+    "early_round_max_ratio": 2.0
+  },
+
+  "bands": [
+    {
+      "name": "weak_hand",
+      "hand_cat_lte": 1,
+      "allow_fold": true,
+      "allow_pk": true,
+      "allow_bet": true,
+      "bet_mul_max_ratio": 1.5,
+      "bet_mul_min_ratio": 1.0
+    },
+    {
+      "name": "mid_hand",
+      "hand_cat_eq": 2,
+      "allow_fold": true,
+      "allow_pk": true,
+      "allow_bet": true,
+      "bet_mul_max_ratio": 2.5,
+      "bet_mul_min_ratio": 1.0
+    },
+    {
+      "name": "flush_hand",
+      "hand_cat_eq": 3,
+      "allow_fold": true,
+      "allow_pk": true,
+      "allow_bet": true,
+      "bet_mul_max_ratio": 3.5,
+      "bet_mul_min_ratio": 1.0
+    },
+    {
+      "name": "strong_hand",
+      "hand_cat_gte": 4,
+      "allow_fold": false,
+      "allow_pk": true,
+      "allow_bet": true,
+      "bet_mul_max_ratio": 6.0,
+      "bet_mul_min_ratio": 1.0
+    }
+  ]
+}

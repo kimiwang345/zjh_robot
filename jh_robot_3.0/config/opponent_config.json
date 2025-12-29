@@ -1,0 +1,24 @@
+{
+  "tiers": {
+    "weak": {
+      "fold_rate": 0.35,
+      "pk_rate": 0.05,
+      "max_bet_ratio": 1.5
+    },
+    "normal": {
+      "fold_rate": 0.2,
+      "pk_rate": 0.15,
+      "max_bet_ratio": 2.5
+    },
+    "strong": {
+      "fold_rate": 0.1,
+      "pk_rate": 0.3,
+      "max_bet_ratio": 4.0
+    }
+  },
+
+  "schedule": [
+    { "update_lte": 50, "tier": "weak" },
+    { "update_lte": 150, "tier": "normal" }
+  ]
+}
